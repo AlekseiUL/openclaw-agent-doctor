@@ -1,5 +1,226 @@
 # 🏥 Agent Doctor - OpenClaw Self-Diagnostic Skill
 
+> Comprehensive self-diagnostics for OpenClaw agents. Checks all critical systems and provides concrete solutions.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-compatible-green.svg)](https://github.com/openclaw/openclaw)
+
+---
+
+## 🎯 What is this?
+
+**Agent Doctor** - an OpenClaw skill that:
+- ✅ Checks 7 system categories (memory, crons, config, files, gateway, system, security)
+- 🔍 Detects 28+ common problems
+- 💡 Suggests concrete solutions with risk assessment
+- 🛡️ Works safely - read-only, fixes only after confirmation
+- 🌍 Supports all platforms (macOS, Linux, Windows)
+
+## 🚀 Quick Start
+
+```bash
+# 1. Install skill
+cd ~/your-workspace/skills
+git clone <repo-url>/agent-doctor.git
+
+# 2. Restart gateway (optional)
+openclaw gateway restart
+
+# 3. Tell your agent:
+"diagnose yourself"
+```
+
+Done! Your agent will check all systems and generate a report.
+
+## 📊 What Gets Checked?
+
+### 🧠 Memory
+- SQLite database and WAL mode
+- memorySearch settings
+- Embedding provider
+- Memory files (MEMORY.md, daily notes)
+- Folder structure
+
+### ⏰ Crons
+- Status of all crons
+- Last runs
+- Errors and failureCount
+
+### ⚙️ Config
+- openclaw.json validity
+- Models and providers
+- Plugins (especially memory-core!)
+- Auth profiles
+
+### 📁 Agent Files
+- SOUL.md, IDENTITY.md
+- AGENTS.md, HEARTBEAT.md, USER.md
+- Skills and availability
+
+### 🔧 Gateway
+- Status and uptime
+- Log errors
+- Ports
+
+### 💾 System
+- Node.js >= 20
+- Python >= 3.11
+- Free disk space
+- OpenClaw version
+
+### 🛡️ Security
+- Gateway bind (not 0.0.0.0!)
+- Auth mode
+- API key leaks
+
+## 💡 Usage Examples
+
+### Basic Diagnostics
+```
+You: diagnose yourself
+
+Agent: 🏥 AGENT DIAGNOSTICS — 2026-03-06 14:30
+
+🧠 Memory: ✅ OK
+⏰ Crons: ✅ OK
+⚙️ Config: ⚠️ 1 issue
+📁 Files: ✅ OK
+🔧 Gateway: ✅ OK
+💾 System: ✅ OK
+🛡️ Security: ✅ OK
+
+━━━━━━━━━━━━━━━━━━━
+
+📋 ISSUE DETAILS:
+
+1. ⚠️ memory-core disabled
+   📝 Problem: Plugin was disabled after update
+   💡 Solution: jq '.plugins[...] | .enabled = true' ...
+   ⚡ Risk: medium
+
+━━━━━━━━━━━━━━━━━━━
+
+Fix this? (yes/no)
+```
+
+### Automatic Check
+```bash
+# Create cron for daily diagnostics
+openclaw cron add daily-health \
+  --schedule "0 8 * * *" \
+  --model "anthropic/claude-sonnet-4-6" \
+  --payload '{"kind":"agentTurn","message":"Run agent-doctor..."}'
+```
+
+### Bash Script (without agent)
+```bash
+bash auto-diagnostic.sh
+# Quick check from terminal or CI/CD
+```
+
+## 📚 Documentation
+
+| File | Description |
+|------|-------------|
+| [SKILL.md](SKILL.md) | Working version (for personal agent) |
+| [SKILL-public.md](SKILL-public.md) | Universal version (for publication) |
+| [EXAMPLES.md](EXAMPLES.md) | 10 usage scenarios |
+| [PROBLEMS_DATABASE.md](PROBLEMS_DATABASE.md) | 28 problems and solutions |
+| [INSTALL.md](INSTALL.md) | Installation guide |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+
+## 🔥 When to Use?
+
+- ✅ **After OpenClaw update** (mandatory!)
+- ✅ When agent behaves strangely
+- ✅ Once a week for prevention
+- ✅ Before important work (stream, presentation)
+- ✅ If agent "forgets" conversations
+
+## ⚠️ Common Problems
+
+### Problem #1: WAL mode disabled
+**Symptom:** Agent doesn't see new entries
+
+**Solution:**
+```bash
+sqlite3 ~/.openclaw/memory/main.sqlite "PRAGMA journal_mode=WAL;"
+```
+
+### Problem #2: memory-core disabled
+**Symptom:** Memory doesn't work after update
+
+**Solution:**
+Agent will fix automatically (after confirmation)
+
+### Problem #3: Gateway bind = 0.0.0.0
+**Symptom:** Danger! Internet access
+
+**Solution:**
+```bash
+jq '.gateway.bind = "127.0.0.1"' ~/.openclaw/openclaw.json > /tmp/config.json && mv /tmp/config.json ~/.openclaw/openclaw.json
+```
+
+## 🛡️ Security
+
+- ✅ Skill ONLY reads data
+- ✅ All fixes require confirmation
+- ✅ Risk assessment for each change
+- ✅ No automatic config changes
+- ✅ Open source (MIT License)
+
+## 🤝 Contributing
+
+Found a bug? Have an idea? Open an issue or PR!
+
+**What's welcome:**
+- New checks
+- Problem solutions
+- Documentation improvements
+- Usage examples
+
+## 📊 Stats
+
+- **28** common problems in database
+- **7** check categories
+- **10** usage examples
+- **3000+** lines of documentation
+- **0** external dependencies
+
+## 🙏 Acknowledgments
+
+Created based on real OpenClaw user issues collected from GitHub, Reddit, and community feedback.
+
+Thanks to:
+- OpenClaw community for bug reports
+- AI ОПЕРАЦИОНКА subscribers for feedback
+- Aleksei Ulianov for idea and specification
+
+## 📄 License
+
+MIT License - freely use, modify, distribute.
+
+See [LICENSE](LICENSE) for details.
+
+## 🔗 Links
+
+- [OpenClaw](https://github.com/openclaw/openclaw)
+- [OpenClaw Discord](https://discord.com/invite/clawd)
+- [OpenClaw Documentation](https://docs.openclaw.io)
+
+---
+
+**Version:** 1.0.0  
+**Date:** 2026-03-06  
+**Author:** [Aleksei Ulianov](https://github.com/AlekseiUL)
+
+🏥 **Healthy agent = productive agent!**
+
+---
+
+# 🏥 Agent Doctor - Самодиагностика для OpenClaw
+
 > Комплексная самодиагностика для OpenClaw агента. Проверяет все критичные системы и предлагает конкретные решения.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -206,7 +427,7 @@ MIT License - свободно используйте, модифицируйт�
 ## 🔗 Ссылки
 
 - [OpenClaw](https://github.com/openclaw/openclaw)
-— [OpenClaw Discord](https://discord.com/invite/clawd)
+- [OpenClaw Discord](https://discord.com/invite/clawd)
 - [Документация OpenClaw](https://docs.openclaw.io)
 
 ---
@@ -216,3 +437,20 @@ MIT License - свободно используйте, модифицируйт�
 **Author:** [Aleksei Ulianov](https://github.com/AlekseiUL)
 
 🏥 **Здоровый агент - продуктивный агент!**
+
+---
+
+## Resources | Ресурсы
+
+- 📺 YouTube: [youtube.com/@alekseiulianov](https://youtube.com/@alekseiulianov)
+- 📱 Telegram: [t.me/Sprut_AI](https://t.me/Sprut_AI)
+- 🔥 AI ОПЕРАЦИОНКА (Premium): [Подписка](https://t.me/tribute/app?startapp=sJyg) — продвинутые материалы, скиллы, агенты, поддержка
+- 💻 GitHub: [github.com/AlekseiUL](https://github.com/AlekseiUL)
+
+## License
+
+MIT
+
+---
+
+*Keeping AI agents healthy since 2026 | Делаю AI-агентов здоровыми с 2026*

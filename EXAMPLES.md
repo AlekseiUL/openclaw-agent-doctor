@@ -128,7 +128,12 @@ openclaw cron enable watchdog-v2
 
 1. Порт занят:
 ```bash
-lsof -ti:3000 | xargs kill -9
+# Сначала graceful stop
+openclaw gateway stop
+
+# Если не помогло - найти и завершить процесс
+lsof -ti:3000 | xargs kill
+sleep 2
 openclaw gateway start
 ```
 
@@ -162,16 +167,18 @@ self-check
 **Блок "Система" покажет:**
 - Свободное место (должно быть >1GB)
 
-**Решение - очистка:**
+**Решение - очистка (безопасные команды):**
 
 ```bash
-# Старые логи
-rm -rf ~/.openclaw/logs/*.log.old
+# Старые логи (старше 7 дней)
+find ~/.openclaw/logs -name "*.log.old" -mtime +7 -delete
+find ~/.openclaw/logs -name "*.gz" -mtime +7 -delete
 
-# Кеш
-rm -rf ~/.openclaw/cache/*
+# Кеш (только временные файлы)
+rm ~/.openclaw/cache/*.tmp 2>/dev/null || true
 
-# Бэкапы старше 30 дней
+# Бэкапы старше 30 дней (сначала посмотреть!)
+find ~/.openclaw/backups -mtime +30 -ls
 find ~/.openclaw/backups -mtime +30 -delete
 ```
 
@@ -365,9 +372,9 @@ sqlite3 ~/.openclaw/memory/main.sqlite "PRAGMA journal_mode=WAL;"
 # Перезапуск gateway (безопасно)
 launchctl kickstart -k gui/$(id -u)/com.openclaw.gateway
 
-# Очистка
-rm -rf ~/.openclaw/logs/*.log.old
-rm -rf ~/.openclaw/cache/*
+# Очистка (безопасные команды)
+find ~/.openclaw/logs -name "*.log.old" -mtime +7 -delete
+rm ~/.openclaw/cache/*.tmp 2>/dev/null || true
 
 # Проверка базы
 sqlite3 ~/.openclaw/memory/main.sqlite "SELECT source, COUNT(*) FROM memory_chunks GROUP BY source;"

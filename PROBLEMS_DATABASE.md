@@ -34,7 +34,7 @@ sqlite3 ~/.openclaw/memory/main.sqlite "PRAGMA journal_mode=WAL;"
 
 ---
 
-### P-002: memorySearch отключен
+### P-002: memory-core плагин отключен
 
 **Симптомы:**
 - memory_search tool не работает
@@ -43,13 +43,17 @@ sqlite3 ~/.openclaw/memory/main.sqlite "PRAGMA journal_mode=WAL;"
 
 **Диагностика:**
 ```bash
-jq '.memorySearch.enabled' ~/.openclaw/openclaw.json
+jq '.plugins.entries["memory-core"].enabled' ~/.openclaw/openclaw.json
 # Если false или null - ПРОБЛЕМА
 ```
 
 **Решение:**
 ```bash
-jq '.memorySearch.enabled = true' ~/.openclaw/openclaw.json > /tmp/config.json && mv /tmp/config.json ~/.openclaw/openclaw.json
+# Используйте openclaw CLI (рекомендуется)
+openclaw config set plugins.entries.memory-core.enabled true
+
+# Или вручную через jq
+jq '.plugins.entries["memory-core"].enabled = true' ~/.openclaw/openclaw.json > /tmp/config.json && mv /tmp/config.json ~/.openclaw/openclaw.json
 ```
 
 **Риск:** Средний (нужна проверка конфига)  
@@ -58,21 +62,21 @@ jq '.memorySearch.enabled = true' ~/.openclaw/openclaw.json > /tmp/config.json &
 
 ---
 
-### P-003: Нет embedding провайдера
+### P-003: Нет auth профиля для embeddings
 
 **Симптомы:**
-- memorySearch включен, но не работает
+- memory-core включен, но поиск не работает
 - Ошибки "no embedding provider configured"
 - memory_search возвращает пустые результаты
 
 **Диагностика:**
 ```bash
-jq '.memorySearch.embeddingProvider' ~/.openclaw/openclaw.json
-# Если null - ПРОБЛЕМА
+jq '.auth.profiles | keys' ~/.openclaw/openclaw.json
+# Должен быть хотя бы один провайдер (openai, anthropic, google)
 ```
 
 **Причина:**
-Для векторного поиска нужны embeddings от OpenAI, Gemini или Anthropic.
+Для векторного поиска нужны embeddings от провайдера с поддержкой embedding API.
 
 **Решение:**
 
@@ -82,26 +86,14 @@ openclaw auth add openai
 # Затем ввести API ключ
 ```
 
-Gemini:
+Google (Gemini):
 ```bash
-openclaw auth add gemini
+openclaw auth add google
 ```
 
-Или вручную в конфиг:
-```json
-{
-  "memorySearch": {
-    "enabled": true,
-    "embeddingProvider": "openai"
-  },
-  "auth": {
-    "profiles": {
-      "openai": {
-        "apiKey": "sk-..."
-      }
-    }
-  }
-}
+Anthropic:
+```bash
+openclaw auth add anthropic
 ```
 
 **Риск:** Низкий  
@@ -391,7 +383,7 @@ openclaw init
 
 ---
 
-### P-013: Модель не настроена
+### P-013: Модели не настроены
 
 **Симптомы:**
 - Ошибки "no model configured"
@@ -399,13 +391,21 @@ openclaw init
 
 **Диагностика:**
 ```bash
-jq '.defaultModel' ~/.openclaw/openclaw.json
-# Если null - ПРОБЛЕМА
+jq '.models.providers | keys' ~/.openclaw/openclaw.json
+# Если пусто или null - ПРОБЛЕМА
 ```
+
+**Причина:**
+В новой схеме OpenClaw модели настраиваются через models.providers, а не defaultModel.
 
 **Решение:**
 ```bash
-jq '.defaultModel = "anthropic/claude-opus-4-6"' ~/.openclaw/openclaw.json > /tmp/config.json && mv /tmp/config.json ~/.openclaw/openclaw.json
+# Используйте openclaw CLI для настройки провайдеров
+openclaw auth add anthropic
+# или
+openclaw auth add openai
+
+# Модели автоматически подтянутся от провайдера
 ```
 
 **Риск:** Низкий  
@@ -414,24 +414,28 @@ jq '.defaultModel = "anthropic/claude-opus-4-6"' ~/.openclaw/openclaw.json > /tm
 
 ---
 
-### P-014: memory-core отключен
+### P-014: Плагин не в entries
 
 **Симптомы:**
-- После обновления OpenClaw память перестала работать
-- memorySearch не работает даже если enabled = true
+- После обновления OpenClaw плагин перестал работать
+- Плагин был настроен по старой схеме (массив)
 
 **Диагностика:**
 ```bash
-jq '.plugins[] | select(.name=="memory-core") | .enabled' ~/.openclaw/openclaw.json
-# Если false или null - ПРОБЛЕМА
+# Новая схема - плагины в plugins.entries
+jq '.plugins.entries | keys' ~/.openclaw/openclaw.json
 ```
 
 **Причина:**
-После обновления OpenClaw плагины могут сбрасываться.
+В новых версиях OpenClaw плагины хранятся в `plugins.entries` как объект, а не массив.
 
 **Решение:**
 ```bash
-jq '.plugins = [.plugins[] | if .name == "memory-core" then .enabled = true else . end]' ~/.openclaw/openclaw.json > /tmp/config.json && mv /tmp/config.json ~/.openclaw/openclaw.json
+# Проверьте формат и включите нужный плагин
+jq '.plugins.entries["memory-core"].enabled = true' ~/.openclaw/openclaw.json > /tmp/config.json && mv /tmp/config.json ~/.openclaw/openclaw.json
+
+# Или через CLI
+openclaw config set plugins.entries.memory-core.enabled true
 ```
 
 **Риск:** Средний  
@@ -569,9 +573,14 @@ lsof -i :3000
 
 **Решение:**
 
-Убить процесс:
+Остановить процесс:
 ```bash
-lsof -ti:3000 | xargs kill -9
+# Сначала попробуйте graceful stop
+openclaw gateway stop
+
+# Если не помогло - найти PID и завершить
+lsof -ti:3000 | xargs kill
+# Подождите 5 секунд, затем запустите
 openclaw gateway start
 ```
 
@@ -711,19 +720,25 @@ df -h ~
 
 **Решение:**
 
-1. Очистить логи:
+1. Очистить логи (старше 7 дней):
 ```bash
-rm -rf ~/.openclaw/logs/*.log.old
-rm -rf ~/.openclaw/logs/*.log.*.gz
+find ~/.openclaw/logs -name "*.log.old" -mtime +7 -delete
+find ~/.openclaw/logs -name "*.gz" -mtime +7 -delete
 ```
 
-2. Очистить кеш:
+2. Очистить кеш (безопасно):
 ```bash
-rm -rf ~/.openclaw/cache/*
+# Просмотреть что будет удалено
+ls -lh ~/.openclaw/cache/
+# Удалить только если уверены
+rm ~/.openclaw/cache/*.tmp 2>/dev/null || true
 ```
 
-3. Очистить старые бэкапы:
+3. Очистить старые бэкапы (старше 30 дней):
 ```bash
+# Сначала посмотреть что удалится
+find ~/.openclaw/backups -mtime +30 -ls
+# Затем удалить
 find ~/.openclaw/backups -mtime +30 -delete
 ```
 

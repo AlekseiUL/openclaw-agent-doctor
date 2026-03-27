@@ -1,7 +1,7 @@
 #!/bin/bash
 # Auto-diagnostic script для OpenClaw
 # Можно запускать из крона или вручную
-# Версия: 1.0.0
+# Версия: 2.0.0 (обновлен под новую схему конфига)
 
 set -e
 
@@ -53,24 +53,19 @@ echo "🧠 ПАМЯТЬ"
 echo "--------"
 
 check "SQLite база существует" \
-    "ls ${MEMORY_DIR}/*.sqlite" \
-    "main.sqlite"
+    "ls ${MEMORY_DIR}/*.sqlite 2>/dev/null" \
+    ".sqlite"
 
-check "WAL mode включен" \
-    "sqlite3 ${MEMORY_DIR}/main.sqlite 'PRAGMA journal_mode;'" \
-    "wal"
+if [[ -f "${MEMORY_DIR}/main.sqlite" ]]; then
+    check "WAL mode включен" \
+        "sqlite3 ${MEMORY_DIR}/main.sqlite 'PRAGMA journal_mode;'" \
+        "wal"
+fi
 
-check "Есть записи в базе" \
-    "sqlite3 ${MEMORY_DIR}/main.sqlite 'SELECT COUNT(*) FROM memory_chunks;'" \
-    ""
-
-check "memorySearch включен" \
-    "jq -r '.memorySearch.enabled' $CONFIG" \
+# Проверка memory-core плагина (новая схема)
+check "memory-core плагин включен" \
+    "jq -r '.plugins.entries[\"memory-core\"].enabled // false' $CONFIG" \
     "true"
-
-check "Embedding provider настроен" \
-    "jq -r '.memorySearch.embeddingProvider' $CONFIG" \
-    ""
 
 echo ""
 
@@ -80,7 +75,7 @@ echo "-------"
 
 if command -v openclaw &> /dev/null; then
     check "Список кронов доступен" \
-        "openclaw cron list --json | jq 'length'" \
+        "openclaw cron list --json 2>/dev/null | jq 'length'" \
         ""
 else
     echo -e "${YELLOW}⚠️  openclaw CLI недоступен${NC}"
@@ -97,13 +92,15 @@ check "openclaw.json валидный" \
     "jq empty $CONFIG" \
     ""
 
-check "Модель настроена" \
-    "jq -r '.defaultModel' $CONFIG" \
+# Проверка моделей (новая схема - models.providers)
+check "Модели настроены" \
+    "jq '.models.providers | keys | length' $CONFIG" \
     ""
 
-check "memory-core включен" \
-    "jq '.plugins[] | select(.name==\"memory-core\") | .enabled' $CONFIG" \
-    "true"
+# Проверка auth профилей
+check "Auth профили настроены" \
+    "jq '.auth.profiles | keys | length' $CONFIG" \
+    ""
 
 echo ""
 
@@ -112,9 +109,13 @@ echo "🔧 GATEWAY"
 echo "---------"
 
 if command -v openclaw &> /dev/null; then
-    check "Gateway запущен" \
-        "openclaw status" \
-        "running"
+    # Проверяем статус без строгого ожидания
+    status_output=$(openclaw status 2>&1 || true)
+    if echo "$status_output" | grep -qi "running\|daemon.*active\|gateway.*ok"; then
+        echo -e "Проверка: Gateway запущен... ${GREEN}✅ OK${NC}"
+    else
+        echo -e "Проверка: Gateway запущен... ${YELLOW}⚠️  Проверьте вручную${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠️  Не могу проверить статус${NC}"
 fi
@@ -125,13 +126,24 @@ echo ""
 echo "💾 СИСТЕМА"
 echo "---------"
 
-check "Node.js версия >= 20" \
-    "node --version" \
-    "v2"
+# Node.js - проверяем мажорную версию >= 20
+node_version=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
+if [[ "$node_version" -ge 20 ]]; then
+    echo -e "Проверка: Node.js версия >= 20... ${GREEN}✅ OK${NC} (v${node_version})"
+else
+    echo -e "Проверка: Node.js версия >= 20... ${RED}❌ FAIL${NC} (v${node_version})"
+    ((ISSUES++))
+fi
 
-check "Python >= 3.11" \
-    "python3 --version" \
-    "3.1"
+# Python - проверяем версию >= 3.11
+python_version=$(python3 --version 2>/dev/null | cut -d' ' -f2 | cut -d. -f1,2)
+python_major=$(echo "$python_version" | cut -d. -f1)
+python_minor=$(echo "$python_version" | cut -d. -f2)
+if [[ "$python_major" -ge 3 ]] && [[ "$python_minor" -ge 11 ]]; then
+    echo -e "Проверка: Python >= 3.11... ${GREEN}✅ OK${NC} ($python_version)"
+else
+    echo -e "Проверка: Python >= 3.11... ${YELLOW}⚠️  Рекомендуется обновить${NC} ($python_version)"
+fi
 
 # Свободное место (минимум 1GB)
 free_space=$(df -k ~ | tail -1 | awk '{print $4}')
@@ -149,7 +161,7 @@ echo ""
 echo "🛡️ БЕЗОПАСНОСТЬ"
 echo "--------------"
 
-bind=$(jq -r '.gateway.bind // "127.0.0.1"' $CONFIG)
+bind=$(jq -r '.gateway.bind // "127.0.0.1"' $CONFIG 2>/dev/null)
 if [[ "$bind" == "0.0.0.0" ]]; then
     echo -e "Проверка: Gateway bind... ${RED}❌ ОПАСНО${NC} (публичный доступ!)"
     ((ISSUES++))
@@ -157,13 +169,18 @@ else
     echo -e "Проверка: Gateway bind... ${GREEN}✅ OK${NC} ($bind)"
 fi
 
-# Проверка ключей в файлах
-key_leaks=$(grep -r "sk-" memory/ 2>/dev/null | wc -l | tr -d ' ')
-if [[ "$key_leaks" -gt 0 ]]; then
-    echo -e "Проверка: API ключи в памяти... ${RED}❌ НАЙДЕНЫ${NC} ($key_leaks)"
-    ((ISSUES++))
+# Проверка ключей в файлах workspace агента
+agent_dir=$(jq -r '.agents.default.workspace // ""' $CONFIG 2>/dev/null)
+if [[ -n "$agent_dir" ]] && [[ -d "$agent_dir/memory" ]]; then
+    key_leaks=$(grep -r "sk-" "$agent_dir/memory/" 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$key_leaks" -gt 0 ]]; then
+        echo -e "Проверка: API ключи в памяти... ${RED}❌ НАЙДЕНЫ${NC} ($key_leaks)"
+        ((ISSUES++))
+    else
+        echo -e "Проверка: API ключи в памяти... ${GREEN}✅ OK${NC}"
+    fi
 else
-    echo -e "Проверка: API ключи в памяти... ${GREEN}✅ OK${NC}"
+    echo -e "Проверка: API ключи в памяти... ${YELLOW}⚠️  Пропущено (workspace не найден)${NC}"
 fi
 
 echo ""

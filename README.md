@@ -3,7 +3,6 @@
 > Comprehensive self-diagnostics for OpenClaw agents. Checks all critical systems and provides concrete solutions.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-compatible-green.svg)](https://github.com/openclaw/openclaw)
 
 ---
@@ -27,6 +26,27 @@ Where permitted by the applicable license, if you reuse, fork, modify, package, 
 - 💡 Suggests concrete solutions with risk assessment
 - 🛡️ Works safely - read-only, fixes only after confirmation
 - 🌍 Supports all platforms (macOS, Linux, Windows)
+
+## Who is this for?
+
+Agent Doctor is for OpenClaw users and maintainers who need a safe first-pass diagnosis before changing configs or restarting services:
+
+- personal agent operators after an OpenClaw update;
+- skill builders debugging memory, crons, gateway, or file layout;
+- consultants checking a client agent without dumping private data;
+- anyone who wants read-only diagnostics before approving fixes.
+
+## Diagnostic flow
+
+```mermaid
+flowchart LR
+    A[User asks for diagnosis] --> B[Read-only system checks]
+    B --> C[Classify issues by category]
+    C --> D[Explain risk and suggested fix]
+    D --> E{User approves?}
+    E -->|yes| F[Apply selected fix]
+    E -->|no| G[Leave system unchanged]
+```
 
 ## 🚀 Quick Start
 
@@ -135,11 +155,9 @@ bash auto-diagnostic.sh
 | File | Description |
 |------|-------------|
 | [SKILL.md](SKILL.md) | Working version (for personal agent) |
-| [SKILL-public.md](SKILL-public.md) | Universal version (for publication) |
 | [EXAMPLES.md](EXAMPLES.md) | 10 usage scenarios |
 | [PROBLEMS_DATABASE.md](PROBLEMS_DATABASE.md) | 28 problems and solutions |
 | [INSTALL.md](INSTALL.md) | Installation guide |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ## 🔥 When to Use?
 
@@ -235,7 +253,6 @@ See [LICENSE](LICENSE) for details.
 > Комплексная самодиагностика для OpenClaw агента. Проверяет все критичные системы и предлагает конкретные решения.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-compatible-green.svg)](https://github.com/openclaw/openclaw)
 
 ---
@@ -356,11 +373,9 @@ bash auto-diagnostic.sh
 | Файл | Описание |
 |------|----------|
 | [SKILL.md](SKILL.md) | Рабочая версия (для личного агента) |
-| [SKILL-public.md](SKILL-public.md) | Универсальная версия (для публикации) |
 | [EXAMPLES.md](EXAMPLES.md) | 10 сценариев использования |
 | [PROBLEMS_DATABASE.md](PROBLEMS_DATABASE.md) | 28 проблем и решений |
 | [INSTALL.md](INSTALL.md) | Инструкция по установке |
-| [CHANGELOG.md](CHANGELOG.md) | История версий |
 
 ## 🔥 Когда использовать?
 

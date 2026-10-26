@@ -3,7 +3,13 @@
 # Можно запускать из крона или вручную
 # Версия: 2.0.0 (обновлен под новую схему конфига)
 
-set -e
+set -uo pipefail
+READ_ONLY=true
+case "${1:---read-only}" in
+    --read-only) ;;
+    --include-runtime) READ_ONLY=false ;;
+    *) echo 'Usage: auto-diagnostic.sh [--read-only|--include-runtime]' >&2; exit 2 ;;
+esac
 
 OPENCLAW_DIR="$HOME/.openclaw"
 MEMORY_DIR="${OPENCLAW_DIR}/memory"
@@ -24,12 +30,12 @@ ISSUES=0
 # Функция для проверки
 check() {
     local name="$1"
-    local command="$2"
-    local expected="$3"
+    local expected="$2"
+    shift 2
     
     echo -n "Проверка: $name... "
     
-    if result=$(eval "$command" 2>&1); then
+    if result=$("$@" 2>&1); then
         if [[ "$expected" == "" ]] || [[ "$result" == *"$expected"* ]]; then
             echo -e "${GREEN}✅ OK${NC}"
             return 0
@@ -52,20 +58,15 @@ check() {
 echo "🧠 ПАМЯТЬ"
 echo "--------"
 
-check "SQLite база существует" \
-    "ls ${MEMORY_DIR}/*.sqlite 2>/dev/null" \
-    ".sqlite"
+check "SQLite база существует" ".sqlite" ls "$MEMORY_DIR/"*.sqlite
 
 if [[ -f "${MEMORY_DIR}/main.sqlite" ]]; then
-    check "WAL mode включен" \
-        "sqlite3 ${MEMORY_DIR}/main.sqlite 'PRAGMA journal_mode;'" \
-        "wal"
+    # Inspect the persistent header without opening SQLite or creating WAL/SHM files.
+    check "WAL mode включен" "wal" python3 -c 'import sys; f=open(sys.argv[1],"rb"); h=f.read(20); f.close(); assert h[:16]==b"SQLite format 3\0"; print("wal" if h[18:20]==b"\2\2" else "rollback")' "$MEMORY_DIR/main.sqlite"
 fi
 
 # Проверка memory-core плагина (новая схема)
-check "memory-core плагин включен" \
-    "jq -r '.plugins.entries[\"memory-core\"].enabled // false' $CONFIG" \
-    "true"
+check "memory-core плагин включен" "true" jq -r '.plugins.entries["memory-core"].enabled // false' "$CONFIG"
 
 echo ""
 
@@ -73,10 +74,10 @@ echo ""
 echo "⏰ КРОНЫ"
 echo "-------"
 
-if command -v openclaw &> /dev/null; then
-    check "Список кронов доступен" \
-        "openclaw cron list --json 2>/dev/null | jq 'length'" \
-        ""
+if [ "$READ_ONLY" = true ]; then
+    echo 'Runtime cron check: NOT_RUN (read-only)'
+elif command -v openclaw &> /dev/null; then
+    check "Список кронов доступен" "" openclaw cron list --json
 else
     echo -e "${YELLOW}⚠️  openclaw CLI недоступен${NC}"
     ((ISSUES++))
@@ -88,19 +89,13 @@ echo ""
 echo "⚙️ КОНФИГ"
 echo "--------"
 
-check "openclaw.json валидный" \
-    "jq empty $CONFIG" \
-    ""
+check "openclaw.json валидный" "" jq empty "$CONFIG"
 
 # Проверка моделей (новая схема - models.providers)
-check "Модели настроены" \
-    "jq '.models.providers | keys | length' $CONFIG" \
-    ""
+check "Модели настроены" "true" jq -e '.models.providers | keys | length > 0' "$CONFIG"
 
 # Проверка auth профилей
-check "Auth профили настроены" \
-    "jq '.auth.profiles | keys | length' $CONFIG" \
-    ""
+check "Auth профили настроены" "true" jq -e '.auth.profiles | keys | length > 0' "$CONFIG"
 
 echo ""
 
@@ -108,7 +103,9 @@ echo ""
 echo "🔧 GATEWAY"
 echo "---------"
 
-if command -v openclaw &> /dev/null; then
+if [ "$READ_ONLY" = true ]; then
+    echo 'Gateway check: NOT_RUN (read-only)'
+elif command -v openclaw &> /dev/null; then
     # Проверяем статус без строгого ожидания
     status_output=$(openclaw status 2>&1 || true)
     if echo "$status_output" | grep -qi "running\|daemon.*active\|gateway.*ok"; then
@@ -161,7 +158,7 @@ echo ""
 echo "🛡️ БЕЗОПАСНОСТЬ"
 echo "--------------"
 
-bind=$(jq -r '.gateway.bind // "127.0.0.1"' $CONFIG 2>/dev/null)
+bind=$(jq -r '.gateway.bind // "127.0.0.1"' "$CONFIG" 2>/dev/null)
 if [[ "$bind" == "0.0.0.0" ]]; then
     echo -e "Проверка: Gateway bind... ${RED}❌ ОПАСНО${NC} (публичный доступ!)"
     ((ISSUES++))
@@ -170,7 +167,7 @@ else
 fi
 
 # Проверка ключей в файлах workspace агента
-agent_dir=$(jq -r '.agents.default.workspace // ""' $CONFIG 2>/dev/null)
+agent_dir=$(jq -r '.agents.defaults.workspace // .agents.default.workspace // ""' "$CONFIG" 2>/dev/null)
 if [[ -n "$agent_dir" ]] && [[ -d "$agent_dir/memory" ]]; then
     key_leaks=$(grep -r "sk-" "$agent_dir/memory/" 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$key_leaks" -gt 0 ]]; then
